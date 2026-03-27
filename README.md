@@ -1,24 +1,22 @@
 # Photo of the Day Bot
 
-Telegram-бот для группового чата с топиками. Следит, чтобы все участницы отправляли фото дня, и напоминает тем, кто забыл.
+A Telegram bot for group chats with topics. It tracks whether all members have sent their daily photo and reminds those who forgot.
 
-## Как работает
+## How it works
 
-- Бот отслеживает фото в указанном топике
-- Определяет дату по подписи к фото (например `27`, `27 марта`, `27.03`)
-- Фото без подписи засчитывается за сегодня
-- Каждый день в 12:00 проверяет, все ли отправили фото за вчера
-- Если кто-то не отправил — пишет напоминание в топик с тегами
+- The bot monitors photos in a specified topic
+- It determines the date from the photo caption (e.g. `27`, `March 27`, `27.03`)
+- Every day at 12:00 it checks whether everyone sent a photo for yesterday
+- If someone didn't — it posts a reminder in the topic with mentions
 
-
-## Технологии
+## Tech stack
 
 - Python 3.12+
-- aiogram 3 — фреймворк для Telegram Bot API
-- APScheduler — планировщик задач по расписанию
-- python-dotenv — загрузка переменных из `.env`
+- aiogram 3 — Telegram Bot API framework
+- APScheduler — task scheduler
+- python-dotenv — loads variables from `.env`
 
-## Запуск
+## Setup
 
 ```bash
 python3 -m venv venv
@@ -27,9 +25,12 @@ pip install -r requirements.txt
 python bot.py
 ```
 
-## Файлы
+## Deployment
 
-- `bot.py` — логика бота
-- `config.py` — настройки (участницы, ID чата/топика, время проверки)
-- `.env` — токен бота (не коммитится)
-- `data.json` — автоматически создаётся, хранит кто отправил фото за какой день
+Deployed on [Fly.io](https://fly.io) via Docker. Data is persisted on a Fly.io volume.
+
+## Files
+
+- `bot.py` — bot logic
+- `config.py` — settings (members, chat/topic IDs, check time)
+- `.env` — bot token
