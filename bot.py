@@ -122,7 +122,8 @@ async def daily_check():
 async def main():
     # Планировщик — ежедневная проверка
     scheduler = AsyncIOScheduler(timezone=TIMEZONE)
-    scheduler.add_job(daily_check, "cron", hour=CHECK_HOUR, minute=CHECK_MINUTE)
+    scheduler.add_job(daily_check, "cron", hour=CHECK_HOUR, minute=CHECK_MINUTE,
+                      misfire_grace_time=60)
     scheduler.start()
 
     logger.info("Бот запущен!")
