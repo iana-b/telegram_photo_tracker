@@ -10,7 +10,12 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from config import BOT_TOKEN, CHAT_ID, TOPIC_ID, MEMBERS, CHECK_HOUR, CHECK_MINUTE, TIMEZONE
+from config import (
+    BOT_TOKEN, CHAT_ID, TOPIC_ID, MEMBERS,
+    CHECK_HOUR, CHECK_MINUTE,
+    BIRTHDAY_HOUR, BIRTHDAY_MINUTE, BIRTHDAYS,
+    TIMEZONE,
+)
 
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -97,6 +102,35 @@ async def handle_photo(message: Message):
         record_photo(username, now.date().isoformat())
 
 
+# --- Поздравления с днём рождения ---
+
+BIRTHDAY_MESSAGES = [
+    "🌹 @{username}, с днём рождения, красотка! Ты сияешь ярче всех звёзд 💕",
+    "🌸 Наша любимая @{username}, с днём рождения! Ты делаешь этот мир красивее 🤍",
+    "💐 С днём рождения, @{username}! Такая красивая девушка заслуживает самый лучший день 💗",
+    "🌷 @{username}, happy birthday! Улыбайся чаще — от твоей улыбки расцветают цветы 🌺",
+    "💕 С днём рождения, наша прекрасная @{username}! Пусть сегодня весь мир будет для тебя 🌹",
+    "🤍 @{username}, красотка, с днём рождения! Будь всегда такой же сияющей ✨💐",
+    "🌸 Любимая @{username}, сегодня твой день! Пусть он будет таким же прекрасным, как ты 💗",
+    "💐 С днём рождения, @{username}! Ты наша звёздочка — продолжай сиять! 🌟🤍",
+    "🌹 @{username}, с праздником! Самой очаровательной — самые тёплые пожелания 💕",
+    "🌺 Happy Birthday, @{username}! Ты потрясающая, не забывай об этом 💐🤍",
+]
+
+
+async def birthday_check():
+    """Проверяет, есть ли сегодня именинник, и отправляет поздравление."""
+    now = datetime.now(tz)
+    today_str = now.strftime("%d.%m")
+
+    for username, bday in BIRTHDAYS.items():
+        if bday == today_str:
+            idx = now.timetuple().tm_yday % len(BIRTHDAY_MESSAGES)
+            text = BIRTHDAY_MESSAGES[idx].format(username=username)
+            await bot.send_message(chat_id=CHAT_ID, text=text)
+            logger.info(f"Отправлено поздравление для @{username}")
+
+
 # --- Ежедневная проверка ---
 
 async def daily_check():
@@ -123,6 +157,8 @@ async def main():
     # Планировщик — ежедневная проверка
     scheduler = AsyncIOScheduler(timezone=TIMEZONE)
     scheduler.add_job(daily_check, "cron", hour=CHECK_HOUR, minute=CHECK_MINUTE,
+                      misfire_grace_time=60)
+    scheduler.add_job(birthday_check, "cron", hour=BIRTHDAY_HOUR, minute=BIRTHDAY_MINUTE,
                       misfire_grace_time=60)
     scheduler.start()
 
