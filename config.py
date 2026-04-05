@@ -13,7 +13,7 @@ CHECK_HOUR = 12
 CHECK_MINUTE = 0
 
 # Время поздравления с днём рождения (часы, минуты)
-BIRTHDAY_HOUR = 9
+BIRTHDAY_HOUR = 10
 BIRTHDAY_MINUTE = 0
 
 # Дни рождения участников (из env в формате "user1:01.01,user2:15.06")
