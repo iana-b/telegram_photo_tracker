@@ -12,6 +12,12 @@ MEMBERS = os.getenv("MEMBERS").split(",")
 CHECK_HOUR = 12
 CHECK_MINUTE = 0
 
+# За сколько последних дней бот принимает фото с указанной датой
+WINDOW_DAYS = 14
+
+# Реакция на засчитанное фото. Только из списка Telegram и без селектора: \u270d, не \u270d\ufe0f.
+REACTION = "\u270d"
+
 # Время поздравления с днём рождения (часы, минуты)
 BIRTHDAY_HOUR = 10
 BIRTHDAY_MINUTE = 0
