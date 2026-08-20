@@ -42,15 +42,19 @@ dp = Dispatcher()
 
 def load_data() -> dict:
     if not DATA_FILE.exists():
-        return {}
+        return {"days": {}, "messages": {}}
     try:
-        return json.loads(DATA_FILE.read_text())
+        raw = json.loads(DATA_FILE.read_text())
     except (json.JSONDecodeError, UnicodeDecodeError) as e:
         # Не удаляем: остаток можно разобрать руками.
         backup = DATA_DIR / f"data.json.corrupt-{datetime.now(tz).strftime('%Y%m%d-%H%M%S')}"
         DATA_FILE.rename(backup)
         logger.error("Файл данных повреждён (%s). Сохранён как %s, продолжаем с пустых данных.", e, backup)
-        return {}
+        return {"days": {}, "messages": {}}
+    if "days" not in raw:
+        raw = {"days": raw}  # старый формат: одни только даты
+    raw.setdefault("messages", {})
+    return raw
 
 
 def save_data(data: dict):
@@ -62,23 +66,47 @@ def save_data(data: dict):
     os.replace(TMP_FILE, DATA_FILE)
 
 
-def record_photo(username: str, date_str: str) -> bool:
-    """Записать что username отправил фото за date_str. False, если уже было записано."""
+def record_photo(username: str, date_str: str, message_id: int) -> bool:
+    """Засчитать фото. False, если этот день уже был засчитан этому человеку."""
     data = load_data()
-    if date_str not in data:
-        data[date_str] = []
-    if username in data[date_str]:
-        return False
-    data[date_str].append(username)
+    day = data["days"].setdefault(date_str, [])
+    is_new = username not in day
+    if is_new:
+        day.append(username)
+        logger.info(f"Записано: @{username} отправил(а) фото за {date_str}")
+    data["messages"][str(message_id)] = {"user": username, "date": date_str}
     save_data(data)
-    logger.info(f"Записано: @{username} отправил(а) фото за {date_str}")
-    return True
+    return is_new
+
+
+def move_photo(message_id: int, new_date: str) -> str | None:
+    """Перенести засчитанное фото на другую дату. Вернуть прежнюю, если перенос был."""
+    data = load_data()
+    entry = data["messages"].get(str(message_id))
+    if entry is None or entry["date"] == new_date:
+        return None
+
+    user, old_date = entry["user"], entry["date"]
+    if user not in data["days"].setdefault(new_date, []):
+        data["days"][new_date].append(user)
+
+    # Старый день снимаем, только если его не подтверждает другое фото.
+    kept = any(e["user"] == user and e["date"] == old_date
+               for mid, e in data["messages"].items() if mid != str(message_id))
+    if not kept and user in data["days"].get(old_date, []):
+        data["days"][old_date].remove(user)
+        if not data["days"][old_date]:
+            del data["days"][old_date]
+
+    entry["date"] = new_date
+    save_data(data)
+    logger.info(f"@{user}: фото перенесено с {old_date} на {new_date}")
+    return old_date
 
 
 def get_missing(date_str: str) -> list[str]:
     """Вернуть список username кто НЕ отправил фото за дату."""
-    data = load_data()
-    sent = data.get(date_str, [])
+    sent = load_data()["days"].get(date_str, [])
     return [m for m in MEMBERS if m not in sent]
 
 
@@ -105,6 +133,12 @@ def resolve_date(day: int, today: date) -> date | None:
 
 # --- Обработчики сообщений ---
 
+def target_date(caption: str | None, today: date) -> date | None:
+    """Дата, за которую засчитывать фото. None — из подписи не понять."""
+    day = extract_day_from_caption(caption or "")
+    return resolve_date(day, today) if day is not None else None
+
+
 async def react(message: Message):
     """Беззвучная отметка 'принято'. Не критична — при ошибке только лог."""
     try:
@@ -125,20 +159,41 @@ async def handle_photo(message: Message):
         return
 
     today = datetime.now(tz).date()
-    day = extract_day_from_caption(message.caption or "")
+    target = target_date(message.caption, today)
 
     # Дату не знаем — засчитываем за сегодня и говорим об этом.
-    target = resolve_date(day, today) if day is not None else None
     comment = None
     if target is None:
         target = today
         comment = f"принято фото за {today.strftime('%d.%m')}"
 
-    is_new = record_photo(username, target.isoformat())
+    is_new = record_photo(username, target.isoformat(), message.message_id)
     await react(message)
 
     if comment and is_new:
         await message.reply(comment, disable_notification=True)
+
+
+@dp.edited_message(F.photo, F.chat.id == CHAT_ID, F.message_thread_id == TOPIC_ID)
+async def handle_edited_photo(message: Message):
+    """Подпись поправили — переносим фото на новую дату."""
+    if not message.from_user:
+        return
+
+    username = message.from_user.username
+    if not username or username not in MEMBERS:
+        return
+
+    target = target_date(message.caption, datetime.now(tz).date())
+    if target is None:
+        return  # дату по-прежнему не понять — оставляем как есть
+
+    if move_photo(message.message_id, target.isoformat()) is None:
+        # Фото прислали до появления индекса: засчитать новый день можем, снять старый — нет.
+        if not record_photo(username, target.isoformat(), message.message_id):
+            return
+
+    await message.reply(f"засчитано за {target.strftime('%d.%m')}", disable_notification=True)
 
 
 # --- Поздравления с днём рождения ---
